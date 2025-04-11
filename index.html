@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Arab Barometer Interactive Map</title>
+  
+  <!-- Leaflet Map Styles -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+  
+  <!-- Leaflet + Chart.js Scripts -->
+  <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  
+  <style>
+    body { font-family: Arial, sans-serif; }
+    #map { height: 500px; margin-bottom: 20px; }
+    #controls { margin-bottom: 20px; }
+    canvas { max-width: 100%; }
+  </style>
+</head>
+<body>
+
+  <h1>Arab Barometer Interactive Dashboard</h1>
+
+  <!-- MAP CONTAINER -->
+  <div id="map"></div>
+
+  <!-- FILTERS -->
+  <div id="controls">
+    <label for="yearSelector">Select Year(s):</label>
+    <select id="yearSelector" multiple>
+      <option value="2018">2018</option>
+      <option value="2020">2020</option>
+      <option value="2022">2022</option>
+    </select>
+
+    <label for="questionSelector">Select Question:</label>
+    <select id="questionSelector">
+      <option value="support_for_democracy">Support for Democracy</option>
+      <option value="trust_in_government">Trust in Government</option>
+    </select>
+
+    <button onclick="generateComparison()">Generate Comparison</button>
+  </div>
+
+  <!-- BAR CHART -->
+  <canvas id="barChart"></canvas>
+
+  <!-- SCRIPT SECTION -->
+  <script>
+    let selectedCountries = [];
+
+    const map = L.map('map').setView([30, 30], 3);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap contributors'
+    }).addTo(map);
+
+    // Load GeoJSON and make countries clickable
+    fetch('https://raw.githubusercontent.com/johan/world.geo.json/master/countries.geo.json')
+      .then(res => res.json())
+      .then(data => {
+        L.geoJSON(data, {
+          onEachFeature: function (feature, layer) {
+            const countryName = feature.properties.name;
+            layer.on('click', function () {
+              if (!selectedCountries.includes(countryName)) {
+                selectedCountries.push(countryName);
+                layer.setStyle({ fillColor: 'green', color: 'green', weight: 2 });
+              } else {
+                selectedCountries = selectedCountries.filter(c => c !== countryName);
+                layer.setStyle({ fillColor: 'transparent', color: 'black', weight: 1 });
+              }
+              console.log('Selected countries:', selectedCountries);
+            });
+          }
+        }).addTo(map);
+      });
+
+    // Generate fake chart data
+    async function generateComparison() {
+      const selectedYears = Array.from(document.getElementById('yearSelector').selectedOptions).map(opt => opt.value);
+      const selectedQuestion = document.getElementById('questionSelector').value;
+
+      const promises = [];
+      for (const country of selectedCountries) {
+        for (const year of selectedYears) {
+          promises.push(mockFetchData(country, year, selectedQuestion));
+        }
+      }
+
+      const allData = await Promise.all(promises);
+      updateBarChart(allData);
+    }
+
+    // Mock data (placeholder)
+    function mockFetchData(country, year, question) {
+      return new Promise(resolve => {
+        const sampleAnswers = {
+          'Strongly Agree': Math.random() * 100,
+          'Agree': Math.random() * 100,
+          'Neutral': Math.random() * 100,
+          'Disagree': Math.random() * 100,
+          'Strongly Disagree': Math.random() * 100
+        };
+        resolve({ country, year, data: sampleAnswers });
+      });
+    }
+
+    // Update bar chart
+    function updateBarChart(allData) {
+      const labels = new Set();
+      allData.forEach(entry => {
+        if (entry.data) {
+          Object.keys(entry.data).forEach(label => labels.add(label));
+        }
+      });
+      const labelArray = Array.from(labels);
+
+      const datasets = allData.map(entry => {
+        const values = labelArray.map(label => entry.data?.[label] ?? 0);
+        return {
+          label: `${entry.country} (${entry.year})`,
+          data: values,
+          backgroundColor: randomColor()
+        };
+      });
+
+      const ctx = document.getElementById('barChart').getContext('2d');
+      if (window.barChartInstance) window.barChartInstance.destroy();
+      window.barChartInstance = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: labelArray,
+          datasets: datasets
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: { position: 'bottom' },
+            title: { display: true, text: 'Survey Results Comparison' }
+          }
+        }
+      });
+    }
+
+    function randomColor() {
+      return `hsl(${Math.floor(Math.random() * 360)}, 70%, 60%)`;
+    }
+  </script>
+</body>
+</html>
